@@ -4,10 +4,301 @@ format: html
 ---
 
 ```{r}
+library(here)
+library(vroom)
+library(tidyr)
+library(ggplot2)
+library(dplyr)
+
+here::i_am("Homework.Rproj")
+```
+
+```{r}
+planets <- vroom(here("data", "Planets.csv"))
+```
+```{r}
+str(planets)
+```
+
+```{r}
+planets <- planets %>%
+  mutate(
+    `MASS (EARTH)` = as.double(`MASS (EARTH)`),
+    `relative radius` = as.double(`relative radius`),
+    `density (earth)` = as.double(`density (earth)`),
+    planet_code = as.integer(planet_code), 
+    star_key=as.integer(star_key)
+  )
+```
+
+```{r}
+planets <- planets %>%
+  mutate(
+    planet_code = as.integer(planet_code),
+    star_key = as.integer(star_key)
+  )
+```
+
+Question 3 
+```{r}
+planets_clean <- planets %>%
+  filter(!is.na(`MASS (EARTH)`), !is.na(`relative radius`))
+
+ggplot(planets_clean, aes(x = `MASS (EARTH)`, y = `relative radius`)) +
+  geom_point(color = "steelblue", alpha = 0.6) +  # points semi-transparents
+  labs(
+    title = "Radius vs Mass of Planets",
+    x = "Mass (Earth Units)",
+    y = "Radius (Earth Units)"
+  ) +
+  theme_minimal() +
+  scale_x_log10() +  # optionnel : log scale si masse varie beaucoup
+  scale_y_log10()    # idem pour le radius
+```
+
+```{r}
+planets_long <- planets %>%
+  pivot_longer(
+    cols = c(`MASS (EARTH)`, `relative radius`, `density (earth)`),
+    names_to = "variable",
+    values_to = "value"
+  )
+```
+
+
+```{r}
+## Summary statistics of planet mass
+
+library(tidyverse)
+library(knitr)
+
+# Nettoyer les données : enlever les NAs
+planets_clean <- planets %>%
+  filter(!is.na(`MASS (EARTH)`))
+
+# Calculer les statistiques
+mass_summary <- planets_clean %>%
+  summarise(
+    Mean = mean(`MASS (EARTH)`),
+    Median = median(`MASS (EARTH)`),
+    `Standard Deviation` = sd(`MASS (EARTH)`),
+    IQR = IQR(`MASS (EARTH)`)
+  ) |>
+  pivot_longer(everything(), names_to = "Statistic", values_to = "Value")
+
+# Affichage dans un tableau
+kable(mass_summary, digits = 2, caption = "Summary statistics of planet mass (Earth units)")
+
+```
+
+```{r}
+# Nombre total de planètes
+total_planets <- nrow(planets_clean)
+
+# Nombre de planètes avec radius > 1
+n_larger_than_earth <- planets_clean %>%
+  filter(`relative radius` > 1) %>%
+  nrow()
+
+# Pourcentage
+percent_larger_than_earth <- (n_larger_than_earth / total_planets) * 100
+
+percent_larger_than_earth
+
+
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+
+# Nettoyer les données pour les variables numériques
+planets_clean <- planets %>%
+  filter(!is.na(`MASS (EARTH)`),
+         !is.na(`relative radius`),
+         !is.na(`density (earth)`))
+
+# Identifier les planètes extrêmes
+heaviest <- planets_clean %>% slice_max(`MASS (EARTH)`, n = 1)
+lightest <- planets_clean %>% slice_min(`MASS (EARTH)`, n = 1)
+
+largest_radius <- planets_clean %>% slice_max(`relative radius`, n = 1)
+smallest_radius <- planets_clean %>% slice_min(`relative radius`, n = 1)
+
+densest <- planets_clean %>% slice_max(`density (earth)`, n = 1)
+least_dense <- planets_clean %>% slice_min(`density (earth)`, n = 1)
+
+# Construire un tableau long (tidy) avec dplyr / tidyr
+extremes_table <- tibble(
+  Characteristic = c(
+    "Heaviest planet",
+    "Lightest planet",
+    "Planet with largest radius",
+    "Planet with smallest radius",
+    "Densest planet",
+    "Least dense planet"
+  ),
+  Planet = c(
+    heaviest$PLANET_NAME,
+    lightest$PLANET_NAME,
+    largest_radius$PLANET_NAME,
+    smallest_radius$PLANET_NAME,
+    densest$PLANET_NAME,
+    least_dense$PLANET_NAME
+  ),
+  Value = c(
+    heaviest$`MASS (EARTH)`,
+    lightest$`MASS (EARTH)`,
+    largest_radius$`relative radius`,
+    smallest_radius$`relative radius`,
+    densest$`density (earth)`,
+    least_dense$`density (earth)`
+  )
+)
+
+# Afficher le tableau
+extremes_table
+
+
+
+```
+
+```{r}
+# Compter le nombre de planètes par étoile
+planets_per_star <- planets %>%
+  summarise(n_planets = n(), .by = star_key)
+
+# Bar plot simple avec geom_bar()
+ggplot(planets_per_star, aes(x = n_planets)) +
+  geom_bar(fill = "steelblue") +
+  labs(
+    title = "Distribution of number of planets per star",
+    x = "Number of planets per star",
+    y = "Number of stars"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+all_star <- vroom(here("data", "All_stars.csv"))
+startypes <- vroom(here("data", "star_types.csv"))
+```
+```{r}
+library(tidyr)
+library(dplyr)
+
+allstars_separated <- all_star |>
+  separate(
+    col = `TYPE OF STAR`,        # la colonne à séparer
+    into = c("classtemperature", "magnitude", "luminosity"),  # noms des nouvelles colonnes
+    sep = "\\|",               # le séparateur | doit être échappé
+    fill = "right"             # si certaines lignes ont moins de valeurs, remplir à droite avec NA
+  )
 
 ```
 
 
+```{r}
+avg_luminosity <- allstars_separated %>%   # supposons que ton dataset s'appelle stars
+  filter(!is.na(`relative luminosity`), !is.na(classtemperature)) %>%  # enlever les NA
+  group_by(classtemperature) %>%
+  summarise(Average_Luminosity = mean(`relative luminosity`)) %>%
+  arrange(classtemperature)   # tri par classe de température
+```
+
+```{r}
+planet_star <- inner_join(planets, all_star, by=join_by(star_key))
+```
+
+```{r}
+# Extraire les star_key uniques dans planets
+stars_with_planets <- planets %>%
+  distinct(star_key)
+stars_without_planets <- all_star %>%
+  filter(!star_key %in% stars_with_planets$star_key)
+
+n_stars_without_planets <- stars_without_planets %>%
+  distinct(star_key) %>%   # pour être sûr d’avoir chaque étoile unique
+  nrow()
+
+n_stars_without_planets
+
+```
+
+```{r}
+library(dplyr)
+
+avg_density_per_star <- planet_star %>%
+  filter(!is.na(`density (earth)`), !is.na(`relative radius`)) %>%  # enlever NA
+  group_by(star_key, `relative radius`) %>%                         # on garde radius pour le plot
+  summarise(avg_planet_density = mean(`density (earth)`), .groups = "drop")
+
+library(ggplot2)
+
+ggplot(avg_density_per_star, aes(x = `relative radius`, y = avg_planet_density)) +
+  geom_point(color = "steelblue") +
+  labs(
+    title = "Average density of planets as a function of star radius",
+    x = "Star radius",
+    y = "Average planet density"
+  ) +
+  theme_minimal()
+
+
+```
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+
+terrain_df <- planets %>%
+  select(planet_code, Type_terrain) %>%           # keep only ID + terrain
+  filter(!is.na(Type_terrain)) %>%               # remove NA
+  separate_rows(Type_terrain, sep = "\\|") %>%   # split multiple terrains into separate rows
+  rename(terrain_type = Type_terrain)            # rename column to something descriptive
+
+climate_df <- planets %>%
+  select(planet_code, `TYPE OF CLIMATE`) %>%
+  filter(!is.na(`TYPE OF CLIMATE`)) %>%
+  separate_rows(`TYPE OF CLIMATE`, sep = ":") %>%  # split multiple climates into separate rows
+  rename(climate_type = `TYPE OF CLIMATE`)
+
+```
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+climate_df %>%
+  count(planet_code, name = "n_climates") %>%  # count climates per planet
+  ggplot(aes(x = n_climates)) +
+  geom_bar(fill = "steelblue") +
+  labs(
+    title = "Distribution of the number of different climates per planet",
+    x = "Number of climates per planet",
+    y = "Number of planets"
+  ) +
+  theme_minimal()
+
+```
+
+
+```{r}
+climate_df %>%
+  left_join(planets %>% select(planet_code, `density (earth)`), by = "planet_code") %>%
+  filter(!is.na(`density (earth)`)) %>%
+  ggplot(aes(x = `density (earth)`)) +
+  geom_histogram(binwidth = 0.2, fill = "steelblue", color = "white") +
+  facet_wrap(~ climate_type) +   # one panel per climate
+  labs(
+    title = "Distribution of planet density by climate type",
+    x = "Planet density (Earth units)",
+    y = "Count"
+  ) +
+  theme_minimal()
+```
 
 ## Quarto
 
